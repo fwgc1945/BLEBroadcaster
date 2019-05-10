@@ -3,7 +3,7 @@
     Function:  BLEブロードキャスト通信のブロードキャスターとして動作します。
                設定した間隔で水位を計測して、宛先を問わず広く発信（ブロードキャスト）します。
                  1.ADV_IND(iBeacon)にてアドバタイズパケットを送信
-                 2.SCAN_RSPにて水位計のデータを送信しています。 
+                 2.SCAN_RSPにて水位データを送信しています。 
                  3.計測・送信時以外はディープスリープ状態に移行します。
 
     Date:      2019/05/08
@@ -26,31 +26,33 @@
 #include <BLEServer.h>
 #include <esp_deep_sleep.h>
 
-/* 基本属性定義  */
+// 基本属性定義
 #define DEVICE_NAME "ESP32"         // デバイス名
-//#define DEVICE_NAME "SkOZ"         // デバイス名
-#define DEVICE_NUMBER 1             // デバイス識別番号（1～8）
+//#define DEVICE_NAME "SkOZ"
 #define SPI_SPEED   115200          // SPI通信速度
-#define DHTTYPE     DHT11           // DHTセンサーの型式
-
 //#define BEACON_UUID           "8ec76ea3-6668-48da-9866-75be8bc86f4d" // UUID 1 128-Bit (may use linux tool uuidgen or random numbers via https://www.uuidgenerator.net/)
 #define BEACON_UUID             "9bdf717e-591e-69ae-6743-f605d90402dc" // skeed作成の水位計（試作）のクローンになっています。
 
-//水位計属性定義
-#define normally 100    //平常時(cm)
-#define marginTop 5     //平常時の上マージン(cm)
-#define marginBottom 5  //平常時の下マージン(cm)
-#define coefficient 0.2 //係数
+// 水位計属性定義
+#define normally 100    // 平常時(cm)
+#define marginTop 5     // 平常時の上マージン(cm)
+#define marginBottom 5  // 平常時の下マージン(cm)
+#define coefficient 0.2 // 係数
 
-RTC_DATA_ATTR static uint8_t seq_number;    // RTCメモリー上のシーケンス番号
-RTC_DATA_ATTR static int counter = 0;
+#define sendCycle 0     // 送信サイクル
+#define number 10       // センサー計測回数
+
+// RTCメモリー上の定義
+RTC_DATA_ATTR static uint8_t seq_number;
+RTC_DATA_ATTR static int counter = 1;
 RTC_DATA_ATTR static float savDistance = normally;
+
 const int sleeping_time = 10;       // ディープスリープ時間（秒）
 const int advertising_time = 1;     // アドバータイジング時間（秒）
 
 /* LEDピン */
-const int ledPin = 25;              // LEDの接続ピン
-const int ledPin2 = 26;             // LEDの接続ピン
+const int ledPin = 13;              // 計測確認用LEDの接続ピン
+const int ledPinSend = 12;          // 送信確認用LEDの接続ピン
 
 //センサー入力ピン
 const int pwPin = 4;
@@ -61,21 +63,29 @@ bool bAbnormal;                     // デバイス異常判定
  *                          Predetermined Sequence                           *
  *****************************************************************************/
 void setup() {
-    doInitialize();                           // 初期化処理をして
+
+    // 初期化処理
+    doInitialize();
     
     //static int counter = 0;
     //static float savDistance = normally;
 
-    Serial.print(F("\nRunning loop #")); Serial.println(counter);
+    Serial.print(F("\nRunning loop: ")); Serial.println(counter);
+    delay(3000);
 
     float temperature = 0;
-    int distance;
+    float distance;
 
-    // 距離を取得
+    // 距離を取得する
     distance = getDistance(temperature);
 
-    //変動値を求める
+    // 変動値を求める
     float result = distance / savDistance;
+
+    Serial.print(F("distance: ")); Serial.println(distance);
+    Serial.print(F("savDistance: ")); Serial.println(savDistance);
+    Serial.print(F("result1: ")); Serial.println(result);
+
     if (distance > savDistance)
     {
         result = result - 1;
@@ -85,24 +95,17 @@ void setup() {
         result = 1 - result;
     }
 
-    //計測回数を加算
-    counter++;
+    Serial.print(F("result2: ")); Serial.println(result);
+    Serial.print(F("counter: ")); Serial.println(counter);
 
-    Serial.print("distance:");
-    Serial.println(distance);
-    Serial.println(savDistance);
-    Serial.println(result);
-    Serial.print("counter:");
-    Serial.println(counter);
-
-    //水位が前回より上がっている場合、平常時－marginTopまでは平常とする
-    //水位が前回より下がっている場合、平常時＋marginBottomまでは異常とする
-    //前回計測値より係数値分変動している場合、
-    //過去6回計測して送信していない場合に送信
+    // 水位が前回より上がっている場合、平常時－marginTopまでは平常とする
+    // 水位が前回より下がっている場合、平常時＋marginBottomまでは異常とする
+    // 前回計測値より係数値分変動している場合、
+    // 過去6回計測して送信していない場合に送信
     if ((distance < savDistance  && distance <= normally - marginTop)
         || (distance > savDistance  && distance >= normally + marginBottom)
         || (result > coefficient)
-        || (counter >= 6)) {
+        || (counter > sendCycle)) {
 
         // BLEデバイスを初期化する
         BLEDevice::init(DEVICE_NAME);             
@@ -110,9 +113,9 @@ void setup() {
         // BLEサーバーを作成してアドバタイズオブジェクトを取得する
         BLEServer *pServer = BLEDevice::createServer();
         BLEAdvertising *pAdvertising = pServer->getAdvertising();
-        // 送信情報を設定してシーケンス番号をインクリメントする
+
+        // 送信情報を設定
         setAdvertisementData(pAdvertising, distance);
-        seq_number++;
 
         // 所定の時間だけアドバタイズする
         pAdvertising->start();
@@ -120,19 +123,20 @@ void setup() {
         delay(advertising_time * 1000);
         pAdvertising->stop();
 
-        //LED点減
-        digitalWrite(ledPin2, HIGH);
+        // LED点減
+        digitalWrite(ledPinSend, HIGH);
         delay(500);
-        digitalWrite(ledPin2, LOW);
+        digitalWrite(ledPinSend, LOW);
 
         //計測回数をクリア
         counter = 0;
     }
 
-    //計測値を退避
-    savDistance = distance;
+    // 計測回数を加算
+    counter++;
 
-    Serial.println("Waiting 10 minutes...");
+    // 計測値を退避
+    savDistance = distance;
 
     // 外部ウェイクアップを設定してディープスリープに移行する
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_32, 1);
@@ -143,26 +147,29 @@ void setup() {
 void loop() {
 }
 
-/*  初期化処理  */
+/*
+    初期化処理
+*/
 void doInitialize() {
     Serial.begin(SPI_SPEED);
     pinMode(pwPin, INPUT);
     pinMode(ledPin, OUTPUT);
-    pinMode(ledPin2, OUTPUT);
+    pinMode(ledPinSend, OUTPUT);
 }
 
 /*****************************< Other functions >*****************************/
 /*
-  アドバタイズデータに送信情報を設定する 
+    アドバタイズデータに送信情報を設定します。
+    param: アドバタイズオブジェクト（参照渡し）,距離
 */
-void setAdvertisementData(BLEAdvertising* pAdvertising, int distance) {
+void setAdvertisementData(BLEAdvertising* pAdvertising, float distance) {
 
-    //iBeaconオブジェクトを設定
+    // iBeaconオブジェクトを設定
     BLEBeacon oBeacon = BLEBeacon();
     oBeacon.setManufacturerId(0x4C00); // fake Apple 0x004C LSB (ENDIAN_CHANGE_U16!)
     oBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
-    oBeacon.setMajor(101 & 0xFFFF); //電信予約値
-    oBeacon.setMinor(9 & 0xFFFF);   //距離センサー（水位含む）
+    oBeacon.setMajor(101 & 0xFFFF); // 電信予約値
+    oBeacon.setMinor(9 & 0xFFFF);   // 距離センサー（水位含む）
     BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
 
     oAdvertisementData.setFlags(0x04); // BR_EDR_NOT_SUPPORTED 0x04
@@ -175,15 +182,8 @@ void setAdvertisementData(BLEAdvertising* pAdvertising, int distance) {
     oAdvertisementData.addData(strServiceData);                                                      
     pAdvertising->setAdvertisementData(oAdvertisementData);
 
-    // 水位を読み取る
-    //float t = dht.readTemperature();
-    //float h = dht.readHumidity();
-
-    float t = 0.01;
-    float h = 0.02;
-
-    uint16_t temp = (uint16_t)(t * 100);
-    uint16_t humd = (uint16_t)(h * 100);
+    // intを2バイトの符号なし整数に変換
+    uint16_t data = (uint16_t)(distance);
 
     // string領域に送信情報を連結する
     std::string strData = "";
@@ -191,8 +191,10 @@ void setAdvertisementData(BLEAdvertising* pAdvertising, int distance) {
     strData += (char)0xff;                  // manufacturer ID low byte
     strData += (char)0xff;                  // manufacturer ID high byte
 
-    strData += (char)(distance & 0xffff);   // 距離をセット
-    strData += (char)0x00;                  // ？？
+    strData += (char)0x01;                  // ？？
+    strData += (char)((data >> 8) & 0xff);  // 距離の上位バイト
+    strData += (char)(data & 0xff);         // 距離の下位バイト
+
     strData = (char)strData.length() + strData; // 先頭にLengthを設定
 
     // デバイス名とフラグをセットし、送信情報を組み込んでアドバタイズオブジェクトに設定する
@@ -206,14 +208,18 @@ void setAdvertisementData(BLEAdvertising* pAdvertising, int distance) {
     pAdvertising->setScanResponseData(oScanResponseData);
 }
 
-//距離を取得
-int getDistance(float temp) {
+/*
+    超音波距離センサーより距離を取得し、移動平均フィルタを通した値を返します。
+    param: 温度
+    return: 計測距離
+*/
+float getDistance(float temp) {
 
     int Duration = 0; //受信した間隔
     int Distance = 0; //距離
 
-    int arrayDistance[8];
-    int length = 8;
+    int arrayDistance[number];
+    int length = number;
 
     for (size_t i = 0; i < length; i++) {
 
@@ -233,7 +239,7 @@ int getDistance(float temp) {
             arrayDistance[i] = Distance;
         }
 
-        delay(1000);
+        delay(500);
     }
 
     // 数値を昇順にソート
@@ -259,12 +265,11 @@ int getDistance(float temp) {
         }
     }
 
-    Serial.print("return:");
-    Serial.println(sumDistance / ix1);
-    Serial.println(sumDistance);
-    Serial.println(ix1);
+    Serial.print(F("return: ")); Serial.println(sumDistance / ix1);
+    Serial.print(F("sumDistance: ")); Serial.println(sumDistance);
+    Serial.print(F("ix1: ")); Serial.println(ix1);
 
-    //LED点減
+    // LED点減
     digitalWrite(ledPin, HIGH);
     delay(500);
     digitalWrite(ledPin, LOW);
