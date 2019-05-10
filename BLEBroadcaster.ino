@@ -27,8 +27,10 @@
 #include <esp_deep_sleep.h>
 
 // 基本属性定義
-#define DEVICE_NAME "ESP32"         // デバイス名
+#define DEVICE_NAME "DENSIN"        // デバイス名
+//#define DEVICE_NAME "ESP32"       // デバイス名
 //#define DEVICE_NAME "SkOZ"
+
 #define SPI_SPEED   115200          // SPI通信速度
 //#define BEACON_UUID           "8ec76ea3-6668-48da-9866-75be8bc86f4d" // UUID 1 128-Bit (may use linux tool uuidgen or random numbers via https://www.uuidgenerator.net/)
 #define BEACON_UUID             "9bdf717e-591e-69ae-6743-f605d90402dc" // skeed作成の水位計（試作）のクローンになっています。
