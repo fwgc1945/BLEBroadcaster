@@ -49,15 +49,18 @@ RTC_DATA_ATTR static uint8_t seq_number;
 RTC_DATA_ATTR static int counter = 1;
 RTC_DATA_ATTR static float savDistance = normally;
 
-const int sleeping_time = 10;       // ディープスリープ時間（秒）
+const int sleeping_time = 600;      // ディープスリープ時間（秒）
 const int advertising_time = 1;     // アドバータイジング時間（秒）
 
-/* LEDピン */
+// LEDピン
 const int ledPin = 13;              // 計測確認用LEDの接続ピン
 const int ledPinSend = 12;          // 送信確認用LEDの接続ピン
 
-//センサー入力ピン
-const int pwPin = 4;
+// センサー入力ピン
+const int sensorPin = 4;
+
+// センサー用電源
+const int powerPin = 14;
 
 bool bAbnormal;                     // デバイス異常判定
 
@@ -73,6 +76,10 @@ void setup() {
     //static float savDistance = normally;
 
     Serial.print(F("\nRunning loop: ")); Serial.println(counter);
+
+    // センサー用電源ON
+    digitalWrite(powerPin, HIGH);
+
     delay(3000);
 
     float temperature = 0;
@@ -140,6 +147,9 @@ void setup() {
     // 計測値を退避
     savDistance = distance;
 
+    // センサー用電源OFF
+    digitalWrite(powerPin, LOW);
+
     // 外部ウェイクアップを設定してディープスリープに移行する
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_32, 1);
     Serial.println("... in deep dleep!");
@@ -154,9 +164,12 @@ void loop() {
 */
 void doInitialize() {
     Serial.begin(SPI_SPEED);
-    pinMode(pwPin, INPUT);
+    pinMode(sensorPin, INPUT);
+    pinMode(powerPin, OUTPUT);
+
     pinMode(ledPin, OUTPUT);
     pinMode(ledPinSend, OUTPUT);
+
 }
 
 /*****************************< Other functions >*****************************/
@@ -226,7 +239,7 @@ float getDistance(float temp) {
     for (size_t i = 0; i < length; i++) {
 
         // パルスポートから読み込む
-        unsigned long range_pw = pulseIn(pwPin, HIGH);
+        unsigned long range_pw = pulseIn(sensorPin, HIGH);
         int inch = range_pw / 147; // 147us per inch
 
         Serial.print(inch);
