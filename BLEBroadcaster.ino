@@ -49,7 +49,7 @@ RTC_DATA_ATTR static uint8_t seq_number;
 RTC_DATA_ATTR static int counter = 1;
 RTC_DATA_ATTR static float savDistance = normally;
 
-const int sleeping_time = 600;      // ディープスリープ時間（秒）
+const int sleeping_time = 300;      // ディープスリープ時間（秒）
 const int advertising_time = 1;     // アドバータイジング時間（秒）
 
 // LEDピン
@@ -230,9 +230,6 @@ void setAdvertisementData(BLEAdvertising* pAdvertising, float distance) {
 */
 float getDistance(float temp) {
 
-    int Duration = 0; //受信した間隔
-    int Distance = 0; //距離
-
     int arrayDistance[number];
     int length = number;
 
@@ -240,16 +237,13 @@ float getDistance(float temp) {
 
         // パルスポートから読み込む
         unsigned long range_pw = pulseIn(sensorPin, HIGH);
-        int inch = range_pw / 147; // 147us per inch
+        int Distance = range_pw / 10;
 
-        Serial.print(inch);
-        Serial.print(" inch (");
-        Serial.print(((unsigned int)(inch) * (unsigned int)(2.54 * 64)) >> 6);
-        Serial.println(" cm) from Pulse");
+        Serial.print(Distance);
+        Serial.println(" (cm) from Pulse");
 
-        if (inch > 0) {
-            Distance = ((unsigned int)(inch) * (unsigned int)(2.54 * 64)) >> 6;
 
+        if (Distance > 0) {
             // 値を配列に格納
             arrayDistance[i] = Distance;
         }
