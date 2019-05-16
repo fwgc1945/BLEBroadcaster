@@ -110,7 +110,7 @@ void setup() {
     // 水位が前回より上がっている場合、平常時－marginTopまでは平常とする
     // 水位が前回より下がっている場合、平常時＋marginBottomまでは異常とする
     // 前回計測値より係数値分変動している場合、
-    // 過去6回計測して送信していない場合に送信
+    // 送信サイクル回計測して送信していない場合に送信
     if ((distance < savDistance  && distance <= normally - marginTop)
         || (distance > savDistance  && distance >= normally + marginBottom)
         || (result > coefficient)
