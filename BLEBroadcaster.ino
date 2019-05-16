@@ -10,7 +10,7 @@
     Author:    DENSIN Koori.A
   
     Hardware   MCU: ESP32 Dev Module
-               水位センサー: MaxSonar WR 
+               水位センサー: MaxSonar WR MB7386
  
                  MaxSonar Arduino
                    GND GND
