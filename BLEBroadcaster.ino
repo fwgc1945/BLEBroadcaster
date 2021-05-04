@@ -8,6 +8,9 @@
 
     Date:      2019/05/08
     Author:    DENSIN Koori.A
+
+    Update:    2019/12/23 デバイスコードを09設定
+                          送信タイミングを10分毎に設定  
   
     Hardware   MCU: ESP32 Dev Module
                水位センサー: MaxSonar WR MB7386
@@ -31,7 +34,7 @@
 //#define DEVICE_NAME "ESP32"       // デバイス名
 //#define DEVICE_NAME "SkOZ"
 
-#define SPI_SPEED   115200          // SPI通信速度
+#define SPI_SPEED   38400           // SPI通信速度
 //#define BEACON_UUID           "8ec76ea3-6668-48da-9866-75be8bc86f4d" // UUID 1 128-Bit (may use linux tool uuidgen or random numbers via https://www.uuidgenerator.net/)
 #define BEACON_UUID             "9bdf717e-591e-69ae-6743-f605d90402dc" // skeed作成の水位計（試作）のクローンになっています。
 
@@ -49,7 +52,7 @@ RTC_DATA_ATTR static uint8_t seq_number;
 RTC_DATA_ATTR static int counter = 1;
 RTC_DATA_ATTR static float savDistance = normally;
 
-const int sleeping_time = 300;      // ディープスリープ時間（秒）
+const int sleeping_time = 600;      // ディープスリープ時間（秒）
 const int advertising_time = 1;     // アドバータイジング時間（秒）
 
 // LEDピン
@@ -206,7 +209,7 @@ void setAdvertisementData(BLEAdvertising* pAdvertising, float distance) {
     strData += (char)0xff;                  // manufacturer ID low byte
     strData += (char)0xff;                  // manufacturer ID high byte
 
-    strData += (char)0x01;                  // ？？
+    strData += (char)0x09;                  // 距離センサー（水位含む）
     strData += (char)((data >> 8) & 0xff);  // 距離の上位バイト
     strData += (char)(data & 0xff);         // 距離の下位バイト
 
